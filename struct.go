@@ -212,6 +212,32 @@ func NewList(x ...*K) *K {
 	return &K{K0, NONE, x}
 }
 
+func NewFromInterface(v interface{}) *K {
+
+	switch t := v.(type) {
+	case int64:
+		return Long(t)
+	case int:
+		return Int(int32(t))
+	case int32:
+		return Int(t)
+	case uuid.UUID:
+		return Guid(t)
+	case byte:
+		return &K{-KG, NONE, t}
+	case string:
+		return Symbol(t)
+	case float32:
+		return Real(t)
+	case float64:
+		return Float(t)
+	case time.Time:
+		return Date(t)
+	default:
+		panic(fmt.Sprintf("Unsupport type %T", v))
+	}
+}
+
 // NewFunc creates K function with body in ctx namespace
 func NewFunc(ctx, body string) *K {
 	return &K{KFUNC, NONE, Function{Namespace: ctx, Body: body}}
@@ -431,6 +457,16 @@ func titleInitial(str string) string {
 		return string(unicode.ToTitle(v)) + str[i+1:]
 	}
 	return ""
+}
+
+func MarshalDict(v interface{}) error {
+	// TODO
+	return nil
+}
+
+func MarshalDictFromMap(v map[string]interface{}) error {
+	// TODO
+	return nil
 }
 
 // UnmarshalDict decodes dict to a struct
