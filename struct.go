@@ -212,29 +212,58 @@ func NewList(x ...*K) *K {
 	return &K{K0, NONE, x}
 }
 
-func NewFromInterface(v interface{}) *K {
+// NewFromInterface will try to construct a K structure based on the type.
+// * for maps or structures, a Dict will be created.
+// * if a suitable type can not be found, it will fall back on K0.
+func NewFromInterface(v interface{}) (*K, error) {
+
+	vv := reflect.ValueOf(v)
+
+	if vv.Kind() == reflect.Struct {
+		return MarshalDict(v)
+	} else if vv.Kind() == reflect.Map {
+		// check if valid map[string]interface{}
+		kt := vv.Type()
+		if kt.Key().Kind() != reflect.String {
+			return nil, errors.New("target type should be map[string]T")
+		}
+
+		return MarshalDictFromMap(v.(map[string]interface{}))
+	}
 
 	switch t := v.(type) {
 	case int64:
-		return Long(t)
+		return Long(t), nil
+	case []int64:
+		return LongV(t), nil
 	case int:
-		return Int(int32(t))
+		return Int(int32(t)), nil
 	case int32:
-		return Int(t)
+		return Int(t), nil
 	case uuid.UUID:
-		return Guid(t)
+		return Guid(t), nil
+	case []uuid.UUID:
+		return GuidV(t), nil
 	case byte:
-		return &K{-KG, NONE, t}
+		return &K{-KG, NONE, t}, nil
+	case []byte:
+		return &K{KG, NONE, t}, nil
 	case string:
-		return Symbol(t)
+		return Symbol(t), nil
+	case []string:
+		return SymbolV(t), nil
 	case float32:
-		return Real(t)
+		return Real(t), nil
 	case float64:
-		return Float(t)
+		return Float(t), nil
+	case []float64:
+		return FloatV(t), nil
 	case time.Time:
-		return Date(t)
+		return Date(t), nil
+	case []time.Time:
+		return DateV(t), nil
 	default:
-		panic(fmt.Sprintf("Unsupport type %T", v))
+		return &K{K0, NONE, v}, nil
 	}
 }
 
@@ -459,14 +488,70 @@ func titleInitial(str string) string {
 	return ""
 }
 
-func MarshalDict(v interface{}) error {
-	// TODO
-	return nil
+func lowerInitial(str string) string {
+	r := []rune(str)
+	r[0] = unicode.ToLower(r[0])
+	return string(r)
 }
 
-func MarshalDictFromMap(v map[string]interface{}) error {
-	// TODO
-	return nil
+func MarshalDict(v interface{}) (*K, error) {
+	vv := reflect.ValueOf(v)
+	if vv.Kind() != reflect.Ptr || vv.IsNil() {
+		return nil, errors.New("Invalid target type. Should be non null pointer")
+	}
+
+	var key []string
+	var val []*K
+
+	for i := 0; i < vv.NumField(); i++ {
+		f := vv.Field(i)
+		name := f.Type().Name()
+		key = append(key, lowerInitial(name))
+		v, err := NewFromInterface(f.Interface())
+		if err != nil {
+			return nil, err
+		}
+		val = append(val, v)
+	}
+
+	a, err := NewFromInterface(key)
+	if err != nil {
+		return nil, err
+	}
+
+	b, err := NewFromInterface(val)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewDict(a, b), nil
+}
+
+func MarshalDictFromMap(m map[string]interface{}) (*K, error) {
+
+	var key []string
+	var val []*K
+
+	for k, v := range m {
+		key = append(key, k)
+		a, err := NewFromInterface(v)
+		if err != nil {
+			return nil, err
+		}
+		val = append(val, a)
+	}
+
+	a, err := NewFromInterface(key)
+	if err != nil {
+		return nil, err
+	}
+
+	b, err := NewFromInterface(val)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewDict(a, b), nil
 }
 
 // UnmarshalDict decodes dict to a struct
