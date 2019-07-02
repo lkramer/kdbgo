@@ -202,6 +202,7 @@ func DialKDBTimeout(host string, port int, auth string, timeout time.Duration) (
 	c := conn.(*net.TCPConn)
 	err = kdbHandshake(c, auth)
 	if err != nil {
+		c.Close()
 		return nil, err
 	}
 	_ = c.SetKeepAlive(true) // care if keepalive is failed to be set?
