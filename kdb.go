@@ -209,3 +209,33 @@ func DialKDBTimeout(host string, port int, auth string, timeout time.Duration) (
 	kdbconn := KDBConn{c, bufio.NewReader(c), host, fmt.Sprint(port), auth}
 	return &kdbconn, nil
 }
+
+func DialKDBContext(ctx context.Context, port int, auth string) (*KDBConn, error) {
+	conn, err := net.DialContext(ctx, "tcp", host+":"+fmt.Sprint(port))
+	if err != nil {
+		return nil, err
+	}
+
+	ready := make(chan bool)
+
+	go func() {
+		c := conn.(*net.TCPConn)
+		err = kdbHandshake(c, auth)
+		if err != nil {
+			return nil, err
+		}
+		_ = c.SetKeepAlive(true) // care if keepalive is failed to be set?
+		kdbconn := KDBConn{c, bufio.NewReader(c), host, fmt.Sprint(port), auth}
+		ready <- true
+	}()
+
+	switch {
+	case <-ready:
+		// all good
+	case <-ctx.Done():
+		conn.Close()
+		return nil, errors.New("KDB Handshake timed out")
+	}
+
+	return &kdbconn, nil
+}

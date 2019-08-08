@@ -263,7 +263,7 @@ func NewFromInterface(v interface{}) (*K, error) {
 	case []time.Time:
 		return DateV(t), nil
 	default:
-		return &K{K0, NONE, v}, nil
+		return nil, fmt.Errorf("unknown type: %T", v)
 	}
 }
 
