@@ -3,6 +3,7 @@ package kdb
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -210,32 +211,35 @@ func DialKDBTimeout(host string, port int, auth string, timeout time.Duration) (
 	return &kdbconn, nil
 }
 
-func DialKDBContext(ctx context.Context, port int, auth string) (*KDBConn, error) {
-	conn, err := net.DialContext(ctx, "tcp", host+":"+fmt.Sprint(port))
+func DialKDBContext(ctx context.Context, host string, port int, auth string) (*KDBConn, error) {
+	dialer := &net.Dialer{}
+	conn, err := dialer.DialContext(ctx, "tcp", host+":"+fmt.Sprint(port))
 	if err != nil {
 		return nil, err
 	}
 
 	ready := make(chan bool)
 
+	c := conn.(*net.TCPConn)
+
 	go func() {
-		c := conn.(*net.TCPConn)
 		err = kdbHandshake(c, auth)
-		if err != nil {
-			return nil, err
-		}
-		_ = c.SetKeepAlive(true) // care if keepalive is failed to be set?
-		kdbconn := KDBConn{c, bufio.NewReader(c), host, fmt.Sprint(port), auth}
 		ready <- true
 	}()
 
-	switch {
+	select {
 	case <-ready:
+		if err != nil {
+			c.Close()
+			return nil, err
+		}
 		// all good
 	case <-ctx.Done():
 		conn.Close()
 		return nil, errors.New("KDB Handshake timed out")
 	}
 
+	_ = c.SetKeepAlive(true) // care if keepalive is failed to be set?
+	kdbconn := KDBConn{c, bufio.NewReader(c), host, fmt.Sprint(port), auth}
 	return &kdbconn, nil
 }
